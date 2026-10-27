@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from tauon.t_modules.t_db_state import allocate_track_id
+from tauon.t_modules.t_remote_playlists import RemotePlaylist, RemotePlaylistSource
 
 allow_tidal = False
 try:
@@ -24,12 +25,19 @@ except Exception:
 	logging.exception("Tidalapi not found")
 
 if TYPE_CHECKING:
-	from tauon.t_modules.t_main import Tauon, TrackClass
+	from tidalapi.playlist import Playlist
+
+	from tauon.t_modules.t_main import GuiVar, PlayerCtl, Tauon, TrackClass
 
 
-class Tidal:
+class Tidal(RemotePlaylistSource):
+	code_prefix = "tpl"
+
 	def __init__(self, tauon: Tauon) -> None:
 		self.tauon = tauon
+		self.gui: GuiVar = tauon.gui
+		self.pctl: PlayerCtl = tauon.pctl
+		self.init_remote_playlists()
 		self.session: Session | None = None
 		self.save_path = str(tauon.cache_directory / "tidal.json")
 		self.login_stage: int = 0
@@ -207,6 +215,8 @@ class Tidal:
 
 		if new:
 			self.tauon.pctl.master_library[nt.index] = nt
+			# So a track repeated in the same import reuses this entry
+			self.import_cache[track_id] = nt
 
 		return nt
 
@@ -273,23 +283,45 @@ class Tidal:
 		self.tauon.show_message("Playlist load complete", mode="done")
 		return None
 
-	def playlist(self, id: str, return_list: bool = False) -> list[int] | None:
+	def _list_playlists(self) -> list[RemotePlaylist] | None:
 		self.try_load()
 		if not self.session:
-			return []
-		self.build_cache()
+			self.remote_playlists_error = _("Not signed in to TIDAL")
+			return None
+		playlists: list[RemotePlaylist] = []
+		offset = 0
+		page_size = 50
+		while True:
+			# Created and favourited playlists together; TIDAL caps each page at 50
+			page = self.session.user.playlist_and_favorite_playlists(offset=offset, limit=page_size)
+			playlists.extend(RemotePlaylist(id=p.id, name=p.name or p.id, count=p.num_tracks or 0) for p in page)
+			if len(page) < page_size:
+				break
+			offset += page_size
+		playlists.sort(key=lambda p: p.name.casefold())
+		return playlists
 
+	def _fetch_playlist(self, playlist_id: str) -> tuple[Playlist, list[int]] | None:
+		self.try_load()
+		if not self.session:
+			return None
+		self.build_cache()
 		try:
-			p = self.session.playlist(id)
+			p = self.session.playlist(playlist_id)
+			return p, [self.new_track(track).index for track in p.tracks_paginated()]
 		except Exception:
 			logging.exception("Error getting tidal playlist")
+			return None
+
+	def playlist_track_ids(self, playlist_id: str) -> list[int] | None:
+		result = self._fetch_playlist(playlist_id)
+		return None if result is None else result[1]
+
+	def playlist(self, id: str, return_list: bool = False) -> list[int] | None:
+		result = self._fetch_playlist(id)
+		if result is None:
 			return []
-
-		playlist = []
-		for track in p.tracks_paginated():
-			nt = self.new_track(track)
-			playlist.append(nt.index)
-
+		p, playlist = result
 		if return_list:
 			return playlist
 

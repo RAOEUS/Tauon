@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
@@ -11,6 +12,7 @@ import pytest
 from tauon.t_modules.t_jellyfin import Jellyfin
 from tauon.t_modules.t_remote_playlists import RemotePlaylist
 from tauon.t_modules.t_subsonic import SubsonicService
+from tauon.t_modules.t_tidal import Tidal
 
 if TYPE_CHECKING:
 	from typing import Any
@@ -280,3 +282,69 @@ def test_import_waits_for_a_running_library_import() -> None:
 	assert not service.remote_playlists_busy
 	assert not service.remote_playlists_loading
 	assert len(service.tauon.messages) == 2
+
+
+class FakeTidalPlaylist:
+	def __init__(self, playlist_id: str, name: str, tracks: list[str]) -> None:
+		self.id = playlist_id
+		self.name = name
+		self.num_tracks = len(tracks)
+		self._tracks = tracks
+
+	def tracks_paginated(self) -> list[SimpleNamespace]:
+		return [
+			SimpleNamespace(
+				id=t, name=f"Track {t}", artist=SimpleNamespace(name="Artist"), artists=[],
+				album=SimpleNamespace(id="al", name="Album", artist=SimpleNamespace(name="Artist"), cover=None),
+				track_num=1, volume_num=1, duration=200, tidal_release_date=None, audio_quality="LOSSLESS")
+			for t in self._tracks
+		]
+
+
+def _tidal(playlists: list[FakeTidalPlaylist]) -> Tidal:
+	tauon = _tauon({})
+	tauon.cache_directory = Path("/nonexistent")
+	tauon.prefs.tidal_quality = 0
+	service = Tidal(tauon)
+	by_id = {p.id: p for p in playlists}
+
+	def playlist_and_favorite_playlists(offset: int = 0, limit: int = 50) -> list[FakeTidalPlaylist]:
+		return playlists[offset:offset + limit]
+
+	service.session = SimpleNamespace(
+		user=SimpleNamespace(playlist_and_favorite_playlists=playlist_and_favorite_playlists),
+		playlist=by_id.__getitem__,
+	)
+	service.try_load = lambda: None
+	return service
+
+
+def test_tidal_lists_all_pages_sorted_by_name() -> None:
+	# 51 playlists spans two TIDAL pages
+	playlists = [FakeTidalPlaylist(str(i), f"Mix {i:02}", []) for i in range(51)]
+	playlists.insert(0, FakeTidalPlaylist("fav", "a favourite", ["x", "y"]))
+	service = _tidal(playlists)
+	service.fetch_playlist_list()
+	assert len(service.remote_playlists) == 52
+	assert service.remote_playlists[0] == RemotePlaylist("fav", "a favourite", 2)
+	assert service.remote_playlists[1] == RemotePlaylist("0", "Mix 00", 0)
+	assert not service.remote_playlists_error
+
+
+def test_tidal_list_needs_a_login() -> None:
+	service = _tidal([])
+	service.session = None
+	service.fetch_playlist_list()
+	assert service.remote_playlists is None
+	assert service.remote_playlists_error
+
+
+def test_tidal_import_uses_the_existing_generator_code() -> None:
+	service = _tidal([FakeTidalPlaylist("pl", "Lo-Fi", ["a", "b", "a"])])
+	service.import_playlists([RemotePlaylist("pl", "Lo-Fi")])
+	pctl = service.pctl
+	assert len(pctl.multi_playlist) == 1
+	assert [pctl.master_library[i].url_key for i in pctl.multi_playlist[0].playlist_ids] == ["a", "b"]
+	# Same code the paste-a-URL path writes, so either way of importing finds the other
+	assert pctl.gen_codes[pctl.multi_playlist[0].uuid_int] == 'tpl"pl"'
+	assert service.playlist_track_ids("missing") is None

@@ -4,6 +4,7 @@ Changelog
 
 ### v13.1.1
 
+ - Added a TIDAL playlist picker to settings
  - Added support for ARTISTS tags and settings for multi-artist separators
  - Added artist/album sort functions
  - Bundled FFmpeg in Windows builds

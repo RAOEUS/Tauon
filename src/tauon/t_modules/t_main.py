@@ -32015,6 +32015,8 @@ class Over:
 			card1_h = round(224 * gui.scale) if waiting_for_redirect else round(216 * gui.scale)
 			card2_h = round(116 * gui.scale) if logged_in else 0
 			total_h = card1_h + (card_gap + card2_h if card2_h else 0)
+			if logged_in:
+				total_h += card_gap + self.settings_server_playlists_height(tauon.tidal)
 			if not draw:
 				return total_h
 
@@ -32089,6 +32091,8 @@ class Over:
 					],
 					accent,
 				)
+				self.render_settings_server_playlists(
+					tauon.tidal, x, y + card1_h + card_gap + card2_h + card_gap, w, accent=accent)
 			return total_h
 
 		card1_h = round(164 * gui.scale)

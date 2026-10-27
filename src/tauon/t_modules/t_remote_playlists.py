@@ -1,4 +1,4 @@
-"""Tauon Music Box - Server playlist picker shared by the Jellyfin and Subsonic integrations"""
+"""Tauon Music Box - Server playlist picker shared by the Jellyfin, Subsonic and TIDAL integrations"""
 
 # Copyright © 2026, Taiko2k captain(dot)gxj(at)gmail.com
 
