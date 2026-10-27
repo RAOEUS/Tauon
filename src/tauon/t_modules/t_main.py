@@ -56658,7 +56658,7 @@ def main(holder: Holder) -> None:
 
 	# Library and loader Variables--------------------------------------------------------
 	db_version: float = 0.0
-	latest_db_version: float = 81
+	latest_db_version: float = 82
 
 	rename_files_previous = ""
 	rename_folder_previous = ""

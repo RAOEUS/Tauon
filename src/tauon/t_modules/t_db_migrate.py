@@ -308,4 +308,11 @@ def database_migrate(
 			prefs.last_fm_username = ""
 			prefs.auto_lfm = False
 
+	if db_version <= 81:
+		logging.info("Updating database to version 82")
+		# TIDAL used to store the sample rate as a string, which crashed the info views
+		for track in master_library.values():
+			if isinstance(track.samplerate, str):
+				track.samplerate = int(track.samplerate) if track.samplerate.isdigit() else 0
+
 	return master_library, multi_playlist, p_force_queue, theme, prefs, gui, gen_codes, radio_playlists

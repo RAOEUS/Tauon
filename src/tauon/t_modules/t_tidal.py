@@ -167,7 +167,7 @@ class Tidal(RemotePlaylistSource):
 			f"track:{track.id}, (quality:{stream.audio_quality}, codec:{manifest.get_codecs()}, {audio_resolution[0]}bit/{audio_resolution[1]}Hz)"
 		)
 		tr.container = manifest.get_codecs().upper()
-		tr.samplerate = str(audio_resolution[1])
+		tr.samplerate = int(audio_resolution[1] or 0)
 		tr.bit_depth = audio_resolution[0]
 		if stream.is_mpd:
 			logging.info("MPD!")
