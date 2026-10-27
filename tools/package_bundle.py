@@ -479,6 +479,8 @@ def collect_windows_dependencies(bundle_root: Path) -> None:
 			destination = bundle_root / dependency.name
 			if not destination.exists():
 				shutil.copy2(dependency, destination)
+				# Some distros ship libraries read-only, which the rpath tools can't open
+				destination.chmod(0o755)
 				queue.append(destination)
 
 
@@ -529,6 +531,8 @@ def collect_linux_dependencies(bundle_root: Path, executable: Path, internal_roo
 			destination = library_directory / dependency_name
 			if not destination.exists():
 				shutil.copy2(dependency, destination)
+				# Some distros ship libraries read-only, which the rpath tools can't open
+				destination.chmod(0o755)
 				queue.append(destination)
 
 	patchelf = shutil.which("patchelf")
